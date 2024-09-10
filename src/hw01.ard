@@ -2,6 +2,12 @@
 --    В IDEA можно просто импортировать данный проект.
 
 -- 2. Определите аналоги следующих функций на языке хаскелл.
+\func second (_ y _ : Nat) : Nat => y
+\func apply (f : Nat -> Nat) (x : Nat) : Nat => f x
+\func compose (f g : Nat -> Nat) (x : Nat) : Nat => f (g x)
+\func flip (f : Nat -> Nat -> Nat) (x y : Nat) : Nat => f y x
+\func second' => flip (second 0)
+
 {- Haskell:
    second :: Nat -> Nat -> Nat -> Nat
    second _ y _ = y
@@ -24,14 +30,18 @@
 
 \func f1 (x y : Nat) => x
 \func f2 : Nat => 0
-\func f3 (f : Nat -> Nat) (z : Nat) : Int => 0
+\func \infixr 9 f3 (f : Nat -> Nat) (z : Nat) : Int => 0
 \func f4 : Nat => 0
-\func f5 => f1
+\func \infix 10 f5 => f1
 \func f6 => f4
 
 \func test => f1 f2 f3 f4 f5 f6
 
 -- 4. Определите функцию if, аналогичную следующей функции:
+\func if (x y z : Bool) : Bool \elim x
+  | true => y
+  | false => z
+
 {- Haskell:
    if :: Bool -> Bool -> Bool -> Bool
    if True t _ = t
@@ -40,18 +50,33 @@
 
 -- 5. Определите || через if.
 
-\func \infixr 2 || (x y : Bool) : Bool => {?}
+\func \infixr 2 || (x y : Bool) : Bool => if x x y
 
 -- 6. Определите возведение в степень и факториал для натуральных чисел.
 
 \open Nat \hiding (-,div) -- Здесь лежат + и *.
 
-\func \infixr 8 ^ (x y : Nat) => {?}
+\func \infixr 8 ^ (x y : Nat) : Nat \elim y
+  | 0 => 1
+  | suc y' => x * (x ^ y')
 
-\func fac (x : Nat) => {?}
+\func fac (x : Nat) : Nat
+  | 0 => 1
+  | suc x' => suc x' * fac x'
 
 -- 7. Определите mod и gcd.
 
-\func mod (x y : Nat) => {?}
+\func mod (x y : Nat) => aux x x y
+    \where {
+      \func aux (fuel x y : Nat) : Nat \elim fuel
+        | 0 => 0
+        | suc fuel => lect01.if (x < y) x (aux fuel (x - y) y)
+    }
 
-\func gcd (x y : Nat) => {?}
+\func gcd (x y : Nat) => lect01.if (x < y) (aux y y x) (aux x x y)
+    \where {
+      \func aux (fuel x y : Nat) : Nat
+        | 0, _, _ => 0
+        | _, x, 0 => x
+        | suc fuel', x, y => aux fuel' y (mod x y)
+    }

@@ -1,13 +1,22 @@
 \import Data.List
+\import Function
+\import Paths
+\import lect03
 \open Nat(+,*)
 
 -- 1. Чему равно fileTest (в нормальной форме)? Докажите это.
+--- \func fileTest => (17, 8, 13, 55, 18, 21)
+--- Функцию невозможно больше редуцировать, поэтому она находится в НФ
 
 -- 2. Чему равно M5.t''' (в нормальной форме)? Докажите это.
+--- \func M5.t''' => ((82, 42, 61, 82, 34, 42, 61, 29), 25, (42, 29))
+--- Функцию невозможно больше редуцировать, поэтому она находится в НФ
 
 -- 3. Докажите ассоциативность ++.
 
-\func ++-assoc {A : \Type} (xs ys zs : List A) : (xs ++ ys) ++ zs = xs ++ (ys ++ zs) => {?}
+\func ++-assoc {A : \Type} (xs ys zs : List A) : (xs ++ ys) ++ zs = xs ++ (ys ++ zs) \elim xs
+  | nil => idp
+  | :: x xs => pmap (\lam xs' => x :: xs') (++-assoc xs ys zs)
 
 -- 4. Докажите, что reverse (reverse xs) = xs, где reverse определен через ++.
 
@@ -16,28 +25,81 @@
   | :: x xs => reverse xs ++ x :: nil
 
 -- Это утверждение будет полезно для доказательства.
-\func reverse++ {A : \Type} (xs ys : List A) : reverse (xs ++ ys) = reverse ys ++ reverse xs => {?}
+\func reverse++ {A : \Type} (xs ys : List A) : reverse (xs ++ ys) = reverse ys ++ reverse xs \elim xs
+  | nil => pmap id (add-nil (reverse ys))
+  | :: x xs => trans (pmap (\lam xs' => xs' ++ (x :: nil)) (reverse++ xs ys)) (add-x (reverse xs) (reverse ys) x)
+  \where {
+    \func add-nil {A : \Type} (xs : List A) : xs = xs ++ nil \elim xs
+      | nil => idp
+      | :: x xs => pmap (\lam xs' => x :: xs') (add-nil xs)
+    \func add-x {A : \Type} (xs ys : List A) (x : A) : (ys ++ xs) ++ x :: nil = ys ++ xs ++ x :: nil  => ++-assoc ys xs (x :: nil)
+  }
 
-\func reverse-isInvolutive {A : \Type} (xs : List A) : reverse (reverse xs) = xs => {?}
+\func reverse-isInvolutive {A : \Type} (xs : List A) : reverse (reverse xs) = xs \elim xs
+  | nil => idp
+  | x :: xs => \let | H1 => reverse++ (reverse xs) (x :: nil)
+                    | H2 => pmap (\lam ys => x :: ys) (reverse-isInvolutive xs)
+                    \in trans H1 H2
 
 -- 5. Докажите дистрибутивность умножения над сложением для натуральных чисел.
 
-\func rdistr (n m k : Nat) : (m + k) * n = m * n + k * n => {?}
+\func rdistr (n m k : Nat) : (m + k) * n = m * n + k * n =>
+  \let | H1 => sym' (*-comm (m + k) n)
+       | H2 => sym' (*-comm m n)
+       | H3 => sym' (*-comm k n)
+       | H4 => eq-sum (n * (m + k)) (n * m) (n * k) ((m + k) * n) (m * n) (k * n) H1 H2 H3
+  \in H4 (ldistr n m k)
+  \where {
+    \func eq (a b a' b' : Nat) (H1 : a = a') (H2 : b = b') (H3 : a = b) : a' = b' =>
+      \let | H1' => sym' H1
+           | H4 => trans H1' H3
+           | H5 => trans H4 H2
+      \in H5
+    \func eq-sum (a b c a' b' c' : Nat) (H1 : a = a') (H2 : b = b') (H3 : c = c') (H4 : a = b + c) : a' = b' + c' =>
+      \let | H5 => eq-sum-sum b c b' c' H2 H3
+           | H6 => eq a (b + c) a' (b' + c') H1 H5 H4
+      \in H6
+    \func eq-sum-sum (x y x' y' : Nat) (H1 : x = x') (H2 : y = y') : x + y = x' + y' =>
+      \let | H3 => pmap (\lam z => x + z) H2
+           | H4 => pmap (\lam z => z + y') H1
+      \in trans H3 H4
+    \func mul-zero (n : Nat) : 0 * n = 0 \elim n
+      | zero => idp
+      | suc n => pmap id (mul-zero n)
+    \func *-comm (m n : Nat) : m * n = n * m \elim m
+      | zero => mul-zero n
+      | suc m => \let | H1 => pmap (\lam x => x + n) (*-comm m n)
+                      | H2 => suc-mul m n
+                 \in trans H2 H1
+    \func suc-mul (m n : Nat) : suc m * n = m * n + n \elim n
+      | zero => idp
+      | suc n => \let | H1 => pmap (\lam x => x + m + 1) (suc-mul m n)
+                      | H2 => sym' (pmap suc (x+comm m n (m * n)))
+                 \in trans H1 H2
+    \func x+comm (m n x : Nat) : x + m + n = x + n + m \elim x
+      | zero => +-comm m n
+      | suc x => pmap (\lam y => 1 + y) (x+comm m n x)
+  }
 
-\func ldistr (n m k : Nat) : n * (m + k) = n * m + n * k => {?}
+\func ldistr (n m k : Nat) : n * (m + k) = n * m + n * k \elim k
+  | zero => idp
+  | suc k => \let | H1 => pmap (\lam x => x + n) (ldistr n m k)
+                  | H2 => +-assoc (n * m) (n * k) n
+             \in trans H1 H2
 
 -- 6. Определите конгруэнтность для функций двух аргументов через transport.
 --    Можно использовать любые функции, определенные через transport.
 
-\func pmap2 {A B C : \Type} (f : A -> B -> C) {a a' : A} (p : a = a') {b b' : B} (q : b = b') : f a b = f a' b' => {?}
+\func pmap2 {A B C : \Type} (f : A -> B -> C) {a a' : A} (p : a = a') {b b' : B} (q : b = b') : f a b = f a' b' =>
+  trans (pmap (\lam x => f x b) p) (pmap (\lam x => f a' x) q)
 
 -- 7. Докажите, что transport выражается через pmap и repl и наоборот.
 
 -- repl говорит, что если у нас есть два равных типа, то у нас есть функция из одного во второй.
 -- Определите repl через transport.
 
-\func repl {A B : \Type} (p : A = B) (a : A) : B => {?}
+\func repl {A B : \Type} (p : A = B) (a : A) : B => transport (\lam X => X) p a
 
 -- Определите transport через repl и pmap.
 
-\func transport' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a' => {?}
+\func transport' {A : \Type} (B : A -> \Type) {a a' : A} (p : a = a') (b : B a) : B a' => repl (pmap (\lam X => B X) p) b

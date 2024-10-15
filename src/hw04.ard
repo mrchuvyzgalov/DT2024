@@ -63,13 +63,13 @@
 --    Высота листа равна 0.
 
 \data Tree (A : \Type) (n : Nat) \elim n
-  | suc n => leaf
+  | n => leaf
   | suc n => node A (Tree A n) (Tree A n)
 
 -- определите функцию, возвращающую высоту дерева.
 
 \func height {A : \Type} (n : Nat) (t : Tree A n) : Fin (suc n) \elim n, t
-  | suc n, Tree.leaf => fzero
+  | n, Tree.leaf => fzero
   | suc n, Tree.node A t t' => \let | h => height n t
                                     | h' => height n t'
                                \in fsuc (if (toNat h < toNat h') h' h)
@@ -90,10 +90,9 @@
 -- Optional task
 -- 8. Определите тип матриц и ряд функций над ними.
 
-\func Mat (A : \Type) (n m : Nat) : \Type \elim n, m
-  | 0, _ => \Sigma
-  | _, 0 => \Sigma
-  | suc n, suc m => \Sigma (vec A (suc m)) (Mat A n (suc m))
+\func Mat (A : \Type) (n m : Nat) : \Type \elim n
+  | 0 => \Sigma
+  | suc n => \Sigma (vec A m) (Mat A n m)
 
 -- диагональная матрица с элементами e на диагонали и z на остальных позициях.
 

@@ -1,12 +1,18 @@
+\import Arith.Nat (pred)
 \import Data.Bool
-\import Data.List (List, length)
+\import Data.List (List, length, nil, ::)
 \import Logic
+\import Meta
+\import Paths
+\import Paths.Meta
 \import lect06
 \open Nat(+,*)
 
 -- 1. Определите предикат принадлежности элемента списку.
 
-\data In {A : \Type} (a : A) (xs : List A)
+\data In {A : \Type} (a : A) (xs : List A) \elim xs
+  | x :: xs => here (x = a)
+  | _ :: xs => next (In a xs)
 
 -- Optional:
 -- 2. Докажите эквивалентность четырех различных определений LessOrEq: lessOrEq, lessOrEq', LessOrEq и LessOrEq'.
@@ -15,6 +21,9 @@
 --    То есть ReflTransClosure R -- это минимальное рефлексивное и транзитивное отношение, содержащее R.
 
 \data ReflTransClosure {A : \Type} (R : A -> A -> \Type) (x y : A)
+  | origin (R x y)
+  | refl (x = y)
+  | trans {z : A} (R x z) (ReflTransClosure R z y)
 
 -- 4. Докажите, что если R уже рекфлексивно и транзитивно, то ReflTransClosure R эквивалентно R.
 
@@ -22,26 +31,89 @@
 
 \func ReflTransClosure-lem {A : \Type} (R : A -> A -> \Type) (refl : \Pi (x : A) -> R x x) (trans : \Pi (x y z : A) -> R x y -> R y z -> R x z)
   : \Pi (x y : A) -> R x y <-> ReflTransClosure R x y
-  => {?}
+  => \lam _ _ => (\lam rxy => origin rxy, to-rxy)
+  \where {
+    \func to-rxy {x y : A} (clo : ReflTransClosure R x y) : R x y \elim clo
+      | origin r => r
+      | ReflTransClosure.refl eq => rewriteI eq (refl x)
+      | ReflTransClosure.trans {z} rxy closure => trans x z y rxy (to-rxy closure)
+  }
 
 -- 5. Определите предикат Sublist xs ys на списках, означающий "список xs является подсписком ys".
 
+\data Sublist {A : \Type} (xs ys : List A) \with
+  | nil, _ => sub-nil
+  | x :: xs, y :: ys => sub-eq (x = y) (Sublist xs ys)
+  | xs, y :: ys => sub-neq (Sublist xs ys)
+
 -- 6. Докажите, что Sublist (filter p xs) xs для любых p и xs.
+
+\func filter-sublist {A : \Type} (p : A -> Bool) (xs : List A) : Sublist (filter p xs) xs \elim xs
+  | nil => sub-nil
+  | x :: xs => cases (p x) \with {
+    | false => sub-neq (filter-sublist p xs)
+    | true => sub-eq idp (filter-sublist p xs)
+  }
 
 -- 7. Определите filter через if, а не через \case.
 --     Докажите для этой версии filter лемму filter-lem.
 
-\func filter' {A : \Type} (p : A -> Bool) (xs : List A) : List A => {?}
+\func filter' {A : \Type} (p : A -> Bool) (xs : List A) : List A \elim xs
+  | nil => nil
+  | x :: xs => if (p x) (x :: filter' p xs) (filter' p xs)
 
-\func filter-lem {A : \Type} (p : A -> Bool) (xs : List A) : LessOrEq (length (filter' p xs)) (length xs) => {?}
+\func filter-lem {A : \Type} (p : A -> Bool) (xs : List A)
+  : LessOrEq (length (filter p xs)) (length xs) \elim xs
+  | nil => zero<=_
+  | a :: xs => \case p a \as b \return
+  LessOrEq (length (\case b \with {
+    | true => a :: filter p xs
+    | false => filter p xs
+  })) (suc (length xs))
+  \with {
+    | false => <=-step-lem (filter-lem p xs)
+    | true => suc<=suc (filter-lem p xs)
+  }
 
 -- 8. Закончите определение функции \func BoolFuncLem (f : Bool -> Bool) (x : Bool) : f (f (f x)) = f x из лекции.
+
+\func BoolFuncLem (f : Bool -> Bool) (x : Bool) : f (f (f x)) = f x
+  => \case \elim x, f true \as ft, f false \as ff, idp : f true = ft, idp : f false = ff \with {
+    | false, false, false, ift, iff => rewrite iff (rewrite iff iff)
+    | false, false, true, ift, iff => rewrite iff (rewrite ift iff)
+    | false, true, false, ift, iff => rewrite iff (rewrite iff iff)
+    | false, true, true, ift, iff => rewrite iff (rewrite ift ift)
+    | true, false, false, ift, iff => rewrite ift (rewrite iff iff)
+    | true, false, true, ift, iff => rewrite ift (rewrite iff ift)
+    | true, true, false, ift, iff => rewrite ift (rewrite ift ift)
+    | true, true, true, ift, iff => rewrite ift (rewrite ift ift)
+  }
 
 -- 9. Докажите, что предикат isEven разрешим.
 
 \func isEven (n : Nat) => \Sigma (k : Nat) (n = 2 * k)
 
-\func isEven-dec : DecPred isEven => {?}
+\func isEven-dec : DecPred isEven => helper
+\where {
+  \func helper (n : Nat) : Decide (isEven n)
+    | 0 => yes (0, idp)
+    | 1 => no (\lam d => \case \elim d \with {
+      | (0, p) => \case p
+      | (suc k, p) => \case p
+    })
+    | suc (suc n) => \case helper n \as d \with {
+      | yes n' => yes (step-forward n')
+      | no p => no (\lam d => p (step-back d))
+    }
+  \func step-forward {n : Nat} (p : isEven n) : isEven (suc (suc n)) \elim n, p
+    | 0, p => (1, idp)
+    | suc n, (0, p) => \case p
+    | suc n, (suc k, p) => (suc (suc k), pmap suc (pmap suc p))
+  \func step-back {n : Nat} (p : isEven (suc (suc n))) : isEven n \elim n, p
+    | 0, p => (0, idp)
+    | suc n, (0, p) => \case p
+    | suc n, (suc k,p) => (k, pmap pred (pmap pred p))
+}
 
 -- 10. Докажите, что функции FromBoolToDec и FromDecToBool взаимно обратны.
 

@@ -1,46 +1,114 @@
+\import Data.Bool
 \import Data.Maybe
 \import Logic
+\import Meta
+\import Paths
+\import Paths.Meta
+\import hw01 (gcd)
 \import lect07
-\open Nat(+)
 
 -- 1. Определите функцию swap несколькими способами.
 
 -- При помощи \cowith и доступа к полям.
-\func swap {A B : \Type} (p : Pair A B) : Pair B A => {?}
+\func swap {A B : \Type} (p : Pair A B) : Pair B A \cowith
+  | fst_ => p.snd_
+  | snd_ => p.fst_
 
 -- При помощи \new и паттерн матчинга.
-\func swap' {A B : \Type} (p : Pair A B) : Pair B A => {?}
+\func swap' {A B : \Type} (p : Pair A B) : Pair B A
+  | (a, b) => \new Pair {
+    | fst_ => b
+    | snd_ => a
+  }
 
 -- При помощи \new и доступа к полям.
-\func swap'' {A B : \Type} (p : Pair A B) : Pair B A => {?}
+\func swap'' {A B : \Type} (p : Pair A B) : Pair B A => \new Pair B A p.snd_ p.fst_
 
 -- 2. Докажите, что swap (swap p) = p.
 
-\func swap-involutive {A B : \Type} (p : Pair A B) : swap (swap p) = p => {?}
+\func swap-involutive {A B : \Type} (p : Pair A B) : swap (swap p) = p => idp
 
 -- 3. Докажите, что тип PosNat 0 пустой, а тип PosNat 1 нет.
 
-\func zero-isNotPos (p : PosNat 0) : Empty => {?}
+\func zero-isNotPos (p : PosNat 0) : Empty => p.p
 
-\func one-isPos : PosNat 1 => {?}
+\func one-isPos : PosNat 1 => \new PosNat { | p => () }
 
 -- 4. Определите \record, состоящий из пар взаимно простых натуральных чисел.
 --    Определите тип, состоящий из натуральных чисел, взаимно простых с 60.
+
+\record MutuallyPrimeNumbers (x y : Nat) (p : So (isMPN x y))
+\where {
+  \func isOne (_ : Nat) : Bool
+    | 0 => false
+    | 1 => true
+    | suc (suc x) => false
+
+  \func isMPN (x y : Nat) : Bool => isOne (gcd x y)
+}
+
+\func MutuallyPrimeNumbersWith60 : \Type => MutuallyPrimeNumbers { | x => 60 }
 
 -- 5. Закончите определение класса монад. Этот класс должен содержать все монадные законы и реализовывать все поля из класса функторов.
 
 \class Monad \extends Functor
   | return {A : \Set} : A -> F A
   | \infixl 1 >>= {A B : \Set} : F A -> (A -> F B) -> F B
+  | left-id {A B : \Set} (x : A) (f : A -> F B) : (return x >>= f) = f x
+  | right-id {A : \Set} (fx : F A) : (fx >>= return) = fx
+  | mon-assoc {A B C : \Set} (fx : F A) (f : A -> F B) (g : B -> F C) : (fx >>= f >>= g) = (fx >>= \lam y => f y >>= g)
+  | Functor.fmap f => \lam fx => fx >>= (\lam y => return (f y))
+  | Functor.fmap-id => right-id
+  | Functor.fmap-comp f g fx => \let | mf => \lam x => return (f x)
+                                     | mg => \lam x => return (g x)
+                                     | ip => inv (path (\lam i => \lam x => (left-id (f x) mg) i))
+                                     | assoc => mon-assoc fx mf mg
+                                \in rewrite assoc (pmap (>>= fx) ip)
 
 -- 6. Определите \instance Monad для Maybe.
 
-\instance MaybeMonad : Monad Maybe => {?}
+\instance MaybeMonad : Monad Maybe
+  | return x => just x
+  | >>= fx f => \case fx \with { | nothing => nothing | just x => f x }
+  | left-id _ _ => idp
+  | right-id fx => \case \elim fx \with {
+    | nothing => idp
+    | just x => idp
+  }
+  | mon-assoc fx _ _ => \case \elim fx \with {
+    | nothing => idp
+    | just x => idp
+  }
 
 -- 7. Определите \instance Monad для State и State'.
 
 \record State (S A : \Type)
   | state : S -> \Sigma S A
 
+\instance StateMonad (S : \Set) : Monad (State S)
+  | return x => \new State { | state => \lam s => (s, x) }
+  | >>= fx f => \new State {
+    | state => \lam s => \let | (s', x') => state {fx} s
+                         \in state {f x'} s'
+  }
+  | left-id _ _ => idp
+  | right-id _ => idp
+  | mon-assoc _ _ _ => idp
+
 \data State' (S A : \Type)
   | state' (S -> \Sigma S A)
+
+\instance StateMonad' (S : \Set) : Monad (State' S)
+  | return x => state' (\lam s => (s, x))
+  | >>= (state' sx) f => state' (\lam s =>
+                                 \let | (s', x') => sx s
+                                 \in \case f x' \with { | state' sx' => sx' s'}
+  )
+  | left-id x f => cases (f x) \with { | state' _ => idp }
+  | right-id fx => cases fx \with { | state' _ => idp }
+  | mon-assoc fx f _ => \case \elim fx \with {
+    | state' fx' =>  pmap state' (ext (
+      \lam s => cases (fx' s) \with {
+        | (s', a) => cases (f a) \with { | state' _ => idp } }
+    ))
+  }

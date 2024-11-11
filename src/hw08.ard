@@ -1,6 +1,12 @@
+\import Arith.Nat
 \import Data.Bool
 \import Data.List \hiding (headDef)
+\import Meta
+\import Paths
+\import Paths.Meta
 \import hw06
+\import lect01 (*)
+\import lect03 (trans')
 \import lect08
 \import Order.LinearOrder
 \open LinearOrder
@@ -10,7 +16,74 @@
 --    * Все элементы filter p xs удовлетворяют предикату p
 --    * Любой подсписок xs с тем же свойством является подсписком filter p xs
 
+\func filter {A : \Type} (p : A -> Bool) (xs : List A) : List A \elim xs
+  | nil => nil
+  | x :: xs => \case p x \with {
+    | false => filter p xs
+    | true => x :: filter p xs
+  }
+
+\data AllMeetP {A : \Type} (p : A -> Bool) (xs : List A) \elim xs
+  | nil => empty
+  | x :: xs => all-p (p x = true) (AllMeetP p xs)
+
+\func filter-sublist {A : \Type} (p : A -> Bool) (xs : List A) : Sublist (filter p xs) xs \elim xs
+  | nil => sub-nil
+  | x :: xs => cases (p x) \with {
+    | false => sub-neq (filter-sublist p xs)
+    | true => sub-eq idp (filter-sublist p xs)
+  }
+
+\func filter-correct {A : \Type} (p : A -> Bool) (xs : List A) : AllMeetP p (filter p xs) \elim xs
+  | nil => empty
+  | x :: xs => cases (p x arg addPath) \with {
+    | false, _ => filter-correct p xs
+    | true, px=true => all-p px=true (filter-correct p xs)
+  }
+
+\func filter-any-sublist {A : \Type}
+                         (p : A -> Bool)
+                         (xs ys : List A)
+                         (sub : Sublist ys xs)
+                         (all : AllMeetP p ys) : Sublist ys (filter p xs) \elim xs, ys, sub, all
+  | _, nil, _, _ => sub-nil
+  | x :: xs, y :: ys, sub-eq y=x sub, all-p py=true all => cases (p x arg addPath) \with {
+    | false, px=false => \let | px=true => rewrite y=x py=true
+                              | true=false => rewrite px=true px=false
+                         \in \case true=false
+    | true, px=true => \let sub-sub => filter-any-sublist p xs ys sub all
+                       \in sub-eq y=x sub-sub
+  }
+  | x :: xs, y :: ys, sub-neq sub, all-p px=true all => cases (p x arg addPath) \with {
+    | false, _ => filter-any-sublist p xs (y :: ys) sub (all-p px=true all)
+    | true, _ => sub-neq (filter-any-sublist p xs (y :: ys) sub (all-p px=true all))
+  }
+
+
 -- 2. Докажите, что Perm l1 l2 тогда и только тогда, когда Insertion.sort l1 = Insertion.sort l2.
+
+\func perm-ins {A : Dec} (xs ys : List A) : Perm xs ys <-> (Insertion.sort xs = Insertion.sort ys)
+  => (to xs ys, from xs ys)
+\where {
+  \func perm-from-eq {A : \Type} {xs ys : List A} (p : xs = ys) : Perm xs ys => \let | j => perm-refl {A} {ys}
+                                                                                \in rewrite p j
+
+  \func to {A : Dec} (xs ys : List A) (p : Perm xs ys) : Insertion.sort xs = Insertion.sort ys \elim xs, ys, p
+    | nil, nil, perm-nil => idp
+    | x :: xs, y :: ys, perm-:: x=y p' => \let | xs-ys => to xs ys p'
+                                          \in path (\lam i => Insertion.sort.insert (x=y i) (xs-ys i))
+    | xs, ys, perm-trans {zs} p' p'' => \let | xs-zs => to xs zs p'
+                                             | zs-ys => to zs ys p''
+                                        \in trans' xs-zs zs-ys
+    | x :: x' :: xs, y :: y' :: ys, perm-swap x=y' x'=y xs=ys => {?}
+
+  \func from {A : Dec} (xs ys : List A) (xs-ys : Insertion.sort xs = Insertion.sort ys) : Perm xs ys \elim xs, ys
+    | nil, nil => perm-nil
+    | nil, y :: ys' => {?}
+    | x :: xs, nil => {?}
+    | x :: xs, y :: ys => {?}
+
+}
 
 -- 3. Докажите, что спецификация "результат является перестановкой входа и отсортирован" является полной для функции sort.
 
@@ -19,19 +92,60 @@
 
 -- 4. Определите факториал через хвостовую рекурсию.
 --    Докажите, что он равен обычному определению факториала.
+\func fact (_ : Nat) : Nat
+  | 0 => 1
+  | suc n => suc n Nat.* fact n
+
+\func fact-tail (n : Nat) : Nat => aux n 1
+\where {
+  \func aux (n acc : Nat) : Nat \elim  n
+    | 0 => acc
+    | suc n => aux n (acc Nat.* suc n)
+}
+
+\func fact-correct (n : Nat) : fact n = fact-tail n
+  => rewrite (aux, inv NatSemiring.*-comm) idp
+\where {
+  \func aux {n acc : Nat} : fact-tail.aux n acc = acc Nat.* fact n \elim n
+    | 0 => idp
+    | suc n => rewrite (aux, inv NatSemiring.*-assoc) idp
+}
 
 -- 5. Определите функцию, которая проверяет правильность скобочной последовательности.
 --    Докажите ее корректность.
 
 \data Paren | Left | Right
 
-\func isBalanced (xs : List Paren) : Bool
-  => {?}
+\func isBalanced (xs : List Paren) : Bool => help xs 0
+\where {
+  \func help (xs : List Paren) (ind : Nat) : Bool \elim xs
+    | nil => \case ind \with {
+      | 0 => true
+      | suc n => false
+    }
+    | x :: xs => \case x \with {
+      | Left => help xs (suc ind)
+      | Right => \case ind \with {
+        | 0 => false
+        | suc ind => help xs ind
+      }
+    }
+}
 
 \data Balanced (xs : List Paren) \with
   | nil => nil-balanced
   | :: Left xs => cons-balanced {ys : List Paren} (Balanced ys) (xs = ys ++ Right :: nil)
   | xs => append-balanced {ys zs : List Paren} (Balanced ys) (Balanced zs) (xs = ys ++ zs)
 
-\func isBalanced-correct (xs : List Paren) : (isBalanced xs = true) <-> Balanced xs
-  => {?}
+\func isBalanced-correct (xs : List Paren) : (isBalanced xs = true) <-> Balanced xs \elim xs
+  | nil => (\lam _ => nil-balanced, \lam _ => idp)
+  | x :: xs => (to (x :: xs), from (x :: xs))
+\where {
+  \func from (xs : List Paren) (b : Balanced xs) : isBalanced xs = true
+    | nil, nil-balanced => idp
+    | Left :: xs, cons-balanced b p => {?}
+    | xs, append-balanced b1 b2 p => {?}
+  \func to (xs : List Paren) (p : isBalanced xs = true) : Balanced xs
+    | nil, p => nil-balanced
+    | x :: xs, p => {?}
+}
